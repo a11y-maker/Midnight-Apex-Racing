@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>C1 NOCTURNE: Midnight Highway</title>
+    <style>
+        * { box-sizing: border-box; user-select: none; margin: 0; padding: 0; }
+        body { background: #050508; color: #fff; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow: hidden; height: 100vh; }
+        #canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; }
+        
+        /* UI Overlay */
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; padding: 20px; }
+        .interactive { pointer-events: auto; }
+        
+        /* Menu Screens */
+        .menu-screen { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(10, 10, 16, 0.92); border: 2px solid #00f3ff; box-shadow: 0 0 20px rgba(0, 243, 255, 0.4); padding: 30px; border-radius: 12px; width: 360px; text-align: center; backdrop-filter: blur(8px); }
+        h1 { color: #00f3ff; font-size: 26px; text-transform: uppercase; letter-spacing: 2px; text-shadow: 0 0 10px #00f3ff; margin-bottom: 5px; }
+        h3 { color: #ff0055; font-size: 14px; text-transform: uppercase; letter-spacing: 4px; margin-bottom: 20px; }
+        
+        .btn { background: linear-gradient(45deg, #00f3ff, #0066ff); border: none; color: white; padding: 12px 20px; font-weight: bold; width: 100%; font-size: 15px; border-radius: 6px; cursor: pointer; margin-top: 10px; text-transform: uppercase; letter-spacing: 1px; transition: transform 0.1s, box-shadow 0.2s; }
+        .btn:hover { transform: translateY(-2px); box-shadow: 0 0 15px rgba(0, 243, 255, 0.6); }
+        .btn-alt { background: linear-gradient(45deg, #ff0055, #ff5500); }
+        .btn-alt:hover { box-shadow: 0 0 15px rgba(255, 0, 85, 0.6); }
+
+        input { width: 100%; padding: 10px; background: rgba(255,255,255,0.1); border: 1px solid #00f3ff; color: white; text-align: center; font-size: 16px; border-radius: 6px; margin: 10px 0; outline: none; }
+        
+        /* HUD */
+        #hud { display: none; width: 100%; justify-content: space-between; align-items: flex-start; }
+        .hud-card { background: rgba(0, 0, 0, 0.7); border: 1px solid rgba(0, 243, 255, 0.3); padding: 15px 20px; border-radius: 8px; backdrop-filter: blur(4px); }
+        .speed-title { font-size: 12px; color: #aaa; text-transform: uppercase; }
+        .speed-val { font-size: 38px; font-weight: bold; color: #00f3ff; text-shadow: 0 0 10px #00f3ff; line-height: 1; }
+        .unit { font-size: 14px; color: #fff; }
+        
+        .nitro-bar-container { width: 150px; height: 10px; background: rgba(255,255,255,0.2); border-radius: 5px; margin-top: 8px; overflow: hidden; }
+        .nitro-bar { width: 100%; height: 100%; background: #00f3ff; box-shadow: 0 0 10px #00f3ff; transition: width 0.1s; }
+        
+        .pos-badge { font-size: 28px; font-weight: bold; color: #ff0055; text-shadow: 0 0 10px #ff0055; text-align: right; }
+        .status-msg { font-size: 12px; color: #ffcc00; margin-top: 5px; text-align: right; }
+
+        /* Controls Helper */
+        #controls-hint { font-size: 12px; color: #888; margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px; }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+    <div id="canvas-container"></div>
+
+    <div id="ui-layer">
+        <!-- HUD -->
+        <div id="hud">
+            <div class="hud-card">
+                <div class="speed-title">Kelajuan</div>
+                <div><span class="speed-val" id="speed-num">0</span> <span class="unit">KM/H</span></div>
+                <div class="nitro-bar-container"><div class="nitro-bar" id="nitro-fill"></div></div>
+            </div>
+            <div class="hud-card" style="text-align: right;">
+                <div class="speed-title">Kedudukan</div>
+                <div class="pos-badge" id="pos-text">1ST</div>
+                <div class="status-msg" id="mode-text">VS AI (HARD)</div>
+            </div>
+        </div>
+
+        <!-- MAIN MENU -->
+        <div class="menu-screen interactive" id="main-menu">
+            <h1>C1 NOCTURNE</h1>
+            <h3>Midnight Highway</h3>
+            <button class="btn" onclick="startSingleplayer()">Main VS AI</button>
+            <button class="btn btn-alt" onclick="showOnlineMenu()">Online Multiplayer</button>
+            <div id="controls-hint">
+                <b>Kawalan:</b><br>
+                [W / ↑] Minyak | [S / ↓] Brek<br>
+                [A/D / ←/→] Stereng | [SPACE] Nitro
+            </div>
+        </div>
+
+        <!-- ONLINE MENU -->
+        <div class="menu-screen interactive" id="online-menu" style="display: none;">
+            <h1>ONLINE MATCH</h1>
+            <h3>Sambungan Peer-to-Peer</h3>
+            <p style="font-size: 13px; color: #ccc; margin-bottom: 10px;">Masukkan ID Bilik yang sama dengan rakan anda:</p>
+            <input type="text" id="room-id-input" value="TOKYO88">
+            <button class="btn" onclick="startOnlineMatch()">Masuk Bilik</button>
+            <button class="btn btn-alt" style="margin-top: 8px;" onclick="hideOnlineMenu()">Kembali</button>
+        </div>
+
+        <!-- GAME OVER SCREEN -->
+        <div class="menu-screen interactive" id="game-over-menu" style="display: none;">
+            <h1 id="result-title">TAMAT</h1>
+            <h3 id="result-sub">Keputusan Perlumbaan</h3>
+            <p id="result-desc" style="margin-bottom: 15px; font-size: 16px;"></p>
+            <button class="btn" onclick="returnToMenu()">Ke Menu Utama</button>
+        </div>
+    </div>
+
+    <script>
+        /* --- GAME ENGINE & STATE --- */
+        let scene, camera, renderer;
+        let playerCar, opponentCar;
+        let trafficCars = [];
+        let road, envLights = [];
+        let gameMode = 'AI'; // 'AI' atau 'ONLINE'
+        let isPlaying = false;
+        let audioCtx, engineOsc, nitroOsc;
+
+        // Player Physical State
+        let playerState = { x: -2.5, z: 0, speed: 0, maxSpeed: 240, accel: 0.6, nitro: 100, isNitro: false, distance: 0 };
+        let opponentState = { x: 2.5, z: -10, speed: 0, distance: -10 };
+        let keys = { w: false, a: false, s: false, d: false, space: false };
+
+        // Real-time Dummy Online Relay Simulation (Broadcast via BroadcastChannel API)
+        let networkChannel = null;
+
+        function initEngine() {
+            const container = document.getElementById('canvas-container');
+            scene = new THREE.Scene();
+            scene.fog = new THREE.FogExp2(0x050508, 0.012);
+
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            container.appendChild(renderer.domElement);
+
+            // Lights
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+            scene.add(ambientLight);
+
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            dirLight.position.set(20, 40, 20);
+            scene.add(dirLight);
+
+            // Create Highway
+            createRoad();
+
+            // Create Cars
+            playerCar = buildCarMesh(0x00f3ff, true);
+            opponentCar = buildCarMesh(0xff0055, false);
+            scene.add(playerCar);
+            scene.add(opponentCar);
+
+            // Create Traffic
+            for(let i=0; i<6; i++) {
+                let traffic = buildCarMesh(0x666677, false);
+                traffic.position.set((Math.random() > 0.5 ? 1 : -1) * (1.8 + Math.random()*4), 0, -100 - i*60);
+                scene.add(traffic);
+                trafficCars.push(traffic);
+            }
+
+            // Controls
+            window.addEventListener('keydown', e => handleKey(e, true));
+            window.addEventListener('keyup', e => handleKey(e, false));
+            window.addEventListener('resize', onWindowResize);
+
+            // Render loop
+            animate();
+        }
+
+        function createRoad() {
+            const roadGeo = new THREE.PlaneGeometry(18, 4000);
+            const roadMat = new THREE.MeshLambertMaterial({ color: 0x111116 });
+            road = new THREE.Mesh(roadGeo, roadMat);
+            road.rotation.x = -Math.PI / 2;
+            scene.add(road);
+
+            // Highway Lights (Poles)
+            for (let i = 0; i < 40; i++) {
+                let lightPole = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.1, 0.1, 8),
+                    new THREE.MeshBasicMaterial({ color: 0xffaa00 })
+                );
+                lightPole.position.set(-10, 4, -i * 100);
+                scene.add(lightPole);
+                envLights.push(lightPole);
+            }
+        }
+
+        function buildCarMesh(colorHex, isPlayer) {
+            const carGroup = new THREE.Group();
+            
+            // Body
+            const body = new THREE.Mesh(
+                new THREE.BoxGeometry(1.9, 0.75, 4.2),
+                new THREE.MeshPhongMaterial({ color: colorHex, shininess: 90 })
+            );
+            body.position.y = 0.5;
+            carGroup.add(body);
+
+            // Cabin
+            const cabin = new THREE.Mesh(
+                new THREE.BoxGeometry(1.4, 0.55, 2),
+                new THREE.MeshPhongMaterial({ color: 0x111115 })
+            );
+            cabin.position.set(0, 1.0, -0.2);
+            carGroup.add(cabin);
+
+            // Lights
+            const tailLightMat = new THREE.MeshBasicMaterial({ color: 0xff0022 });
+            const tailL = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.15, 0.1), tailLightMat);
+            tailL.position.set(-0.6, 0.6, 2.1);
+            const tailR = tailL.clone();
+            tailR.position.x = 0.6;
+            carGroup.add(tailL);
+            carGroup.add(tailR);
+
+            return carGroup;
+        }
+
+        function handleKey(e, isDown) {
+            const k = e.code;
+            if (k === 'KeyW' || k === 'ArrowUp') keys.w = isDown;
+            if (k === 'KeyS' || k === 'ArrowDown') keys.s = isDown;
+            if (k === 'KeyA' || k === 'ArrowLeft') keys.a = isDown;
+            if (k === 'KeyD' || k === 'ArrowRight') keys.d = isDown;
+            if (k === 'Space') keys.space = isDown;
+        }
+
+        /* --- AUDIO SYNTHESIZER --- */
+        function initAudio() {
+            if (audioCtx) return;
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            
+            // Engine Sound Oscillator
+            engineOsc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            engineOsc.type = 'sawtooth';
+            engineOsc.frequency.setValueAtTime(40, audioCtx.currentTime);
+            gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+            engineOsc.connect(gain);
+            gain.connect(audioCtx.destination);
+            engineOsc.start();
+        }
+
+        function updateAudio() {
+            if (!audioCtx || !engineOsc) return;
+            const pitch = 40 + (playerState.speed / playerState.maxSpeed) * 160;
+            engineOsc.frequency.setTargetAtTime(pitch, audioCtx.currentTime, 0.1);
+        }
+
+        /* --- GAME LOGIC & LOOP --- */
+        function startSingleplayer() {
+            gameMode = 'AI';
+            document.getElementById('mode-text').innerText = "VS AI (HARD)";
+            launchGame();
+        }
+
+        function showOnlineMenu() {
+            document.getElementById('main-menu').style.display = 'none';
+            document.getElementById('online-menu').style.display = 'block';
+        }
+
+        function hideOnlineMenu() {
+            document.getElementById('online-menu').style.display = 'none';
+            document.getElementById('main-menu').style.display = 'block';
+        }
+
+        function startOnlineMatch() {
+            gameMode = 'ONLINE';
+            const roomId = document.getElementById('room-id-input').value;
+            document.getElementById('mode-text').innerText = "ONLINE: " + roomId;
+            
+            // Setup Cross-Tab Broadcast Channel (Simulating WebSocket server locally)
+            networkChannel = new BroadcastChannel('c1_room_' + roomId);
+            networkChannel.onmessage = (e) => {
+                if (e.data && e.data.type === 'SYNC') {
+                    opponentState.x = e.data.x;
+                    opponentState.z = e.data.z;
+                    opponentState.speed = e.data.speed;
+                    opponentState.distance = e.data.distance;
+                }
+            };
+
+            document.getElementById('online-menu').style.display = 'none';
+            launchGame();
+        }
+
+        function launchGame() {
+            initAudio();
+            document.getElementById('main-menu').style.display = 'none';
+            document.getElementById('hud').style.display = 'flex';
+            
+            // Reset States
+            playerState = { x: -2.5, z: 0, speed: 0, maxSpeed: 250, accel: 0.8, nitro: 100, isNitro: false, distance: 0 };
+            opponentState = { x: 2.5, z: -5, speed: 0, distance: -5 };
+            
+            isPlaying = true;
+        }
+
+        function returnToMenu() {
+            document.getElementById('game-over-menu').style.display = 'none';
+            document.getElementById('main-menu').style.display = 'block';
+            document.getElementById('hud').style.display = 'none';
+            isPlaying = false;
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            if (isPlaying) {
+                // 1. Acceleration & Nitro
+                if (keys.space && playerState.nitro > 0) {
+                    playerState.isNitro = true;
+                    playerState.nitro = Math.max(0, playerState.nitro - 0.4);
+                    playerState.speed = Math.min(playerState.speed + playerState.accel * 2, playerState.maxSpeed + 40);
+                } else {
+                    playerState.isNitro = false;
+                    if (playerState.nitro < 100) playerState.nitro += 0.1;
+                    
+                    if (keys.w) {
+                        playerState.speed = Math.min(playerState.speed + playerState.accel, playerState.maxSpeed);
+                    } else if (keys.s) {
+                        playerState.speed = Math.max(playerState.speed - 2.0, 0);
+                    } else {
+                        playerState.speed = Math.max(playerState.speed - 0.3, 0);
+                    }
+                }
+
+                // 2. Steering
+                if (keys.a && playerState.x > -6.5) playerState.x -= 0.14;
+                if (keys.d && playerState.x < 6.5) playerState.x += 0.14;
+
+                // Position calculation
+                playerState.z -= playerState.speed * 0.04;
+                playerState.distance += playerState.speed * 0.01;
+
+                // 3. Opponent Logic (AI or Network Sync)
+                if (gameMode === 'AI') {
+                    // Rubberband AI
+                    let targetSpeed = 220 + (playerState.distance > opponentState.distance ? 25 : -10);
+                    opponentState.speed += (targetSpeed - opponentState.speed) * 0.02;
+                    opponentState.z -= opponentState.speed * 0.04;
+                    opponentState.distance += opponentState.speed * 0.01;
+                } else if (networkChannel) {
+                    // Broadcast local position to peer
+                    networkChannel.postMessage({
+                        type: 'SYNC',
+                        x: playerState.x,
+                        z: playerState.z,
+                        speed: playerState.speed,
+                        distance: playerState.distance
+                    });
+                }
+
+                // 4. Update Meshes
+                playerCar.position.set(playerState.x, 0, playerState.z);
+                opponentCar.position.set(opponentState.x, 0, opponentState.z);
+
+                // Move Traffic Cars
+                trafficCars.forEach((tc, idx) => {
+                    tc.position.z += 0.5; // moving traffic
+                    if (tc.position.z > playerCar.position.z + 20) {
+                        tc.position.z = playerCar.position.z - 200 - Math.random() * 100;
+                        tc.position.x = (Math.random() > 0.5 ? 1 : -1) * (1.8 + Math.random() * 4);
+                    }
+
+                    // Simple Collision Check
+                    if (Math.abs(playerCar.position.z - tc.position.z) < 3.5 && Math.abs(playerCar.position.x - tc.position.x) < 1.6) {
+                        playerState.speed *= 0.4; // slowdown on hit
+                    }
+                });
+
+                // Camera Tracking
+                camera.position.set(playerState.x * 0.5, playerCar.position.y + 2.8, playerCar.position.z + 7.5);
+                camera.lookAt(playerState.x * 0.8, playerCar.position.y + 1, playerCar.position.z - 12);
+
+                // Sound update
+                updateAudio();
+
+                // UI Update
+                document.getElementById('speed-num').innerText = Math.round(playerState.speed);
+                document.getElementById('nitro-fill').style.width = playerState.nitro + '%';
+                document.getElementById('pos-text').innerText = playerState.distance >= opponentState.distance ? '1ST' : '2ND';
+
+                // Check Finish Line (3000m)
+                if (playerState.distance >= 3000 || opponentState.distance >= 3000) {
+                    isPlaying = false;
+                    document.getElementById('hud').style.display = 'none';
+                    document.getElementById('game-over-menu').style.display = 'block';
+                    
+                    const won = playerState.distance >= opponentState.distance;
+                    document.getElementById('result-title').innerText = won ? "MENANG!" : "KALAH!";
+                    document.getElementById('result-title').style.color = won ? "#00f3ff" : "#ff0055";
+                    document.getElementById('result-desc').innerText = won ? "Anda menguasai Lebuh Raya Shuto!" : "Lawan anda telah memotong di garisan penamat.";
+                }
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        initEngine();
+    </script>
+</body>
+</html>
